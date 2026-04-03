@@ -1,0 +1,23 @@
+FROM node:22-bullseye
+
+# Install Python for the LangGraph agent runner.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install backend Node dependencies first for better layer caching.
+COPY package*.json ./
+RUN npm install
+
+# Install Python dependencies for the agent.
+COPY agent/requirements.txt ./agent/requirements.txt
+RUN pip3 install --no-cache-dir -r ./agent/requirements.txt
+
+# Copy the backend application code.
+COPY . .
+
+EXPOSE 10000
+
+CMD ["npm", "start"]

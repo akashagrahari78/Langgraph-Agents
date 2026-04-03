@@ -112,7 +112,7 @@ function handleStdout(sessionId, chunk) {
 
 function createSession(params, onEvent, pending = null) {
   const sessionId = params.sessionId || crypto.randomUUID();
-  const agentScriptDir = path.resolve(__dirname, '..', '..');
+  const agentScriptDir = path.resolve(__dirname, '..');
   const wrapperScript = path.resolve(__dirname, 'agent_wrapper.py');
   const payload = JSON.stringify({
     ...params,

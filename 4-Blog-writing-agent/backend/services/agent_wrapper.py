@@ -17,12 +17,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 
-AGENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BACKEND_DIR = os.path.join(PROJECT_DIR, "backend")
+AGENT_DIR = os.path.join(BACKEND_DIR, "agent")
 
-load_dotenv(os.path.join(AGENT_DIR, ".env"))
-load_dotenv(os.path.join(AGENT_DIR, "..", ".env"))
+load_dotenv(os.path.join(PROJECT_DIR, ".env"))
+load_dotenv(os.path.join(os.path.dirname(PROJECT_DIR), ".env"))
 
-sys.path.insert(0, AGENT_DIR)
+sys.path.insert(0, BACKEND_DIR)
 
 
 def emit(prefix, payload):
@@ -134,7 +136,7 @@ def serialize_final_result(out, payload, default_model_by_provider):
 
 
 def build_workflow_with_progress():
-    from main import (
+    from agent.main import (
         BlogState,
         DEFAULT_MODEL_BY_PROVIDER,
         configure_llm,

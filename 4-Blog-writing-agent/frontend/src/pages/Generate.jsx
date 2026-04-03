@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { HiOutlineClipboardCopy, HiOutlineDownload, HiOutlineDocumentDownload, HiOutlinePencil } from 'react-icons/hi'
+import axios from 'axios'
 import ProgressTracker from '../components/ProgressTracker'
 import MarkdownViewer from '../components/MarkdownViewer'
 import { useGenerate } from '../hooks/useGenerate'
@@ -16,6 +17,7 @@ const EXAMPLE_TOPICS = [
 ]
 
 const MAX_TOPIC_WORDS = 30
+const MAX_OPENAI_BLOGS = 2
 
 const LLM_OPTIONS = [
   {
@@ -49,9 +51,10 @@ export default function Generate() {
   const [includeImages, setIncludeImages] = useState(false)
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [openAiUsageCount, setOpenAiUsageCount] = useState(0)
 
   const { generate, submitPlanReview, error } = useGenerate()
-  const { isGenerating, progress, generatedBlog, pendingPlanReview, editMode, toggleEditMode, setEditMode } = useStore()
+  const { token, isGenerating, progress, generatedBlog, pendingPlanReview, editMode, toggleEditMode, setEditMode } = useStore()
   const [editContent, setEditContent] = useState('')
   const textareaRef = useRef(null)
   const exportPreviewRef = useRef(null)
@@ -65,8 +68,42 @@ export default function Generate() {
     if (generatedBlog?.finalMarkdown) setEditContent(generatedBlog.finalMarkdown)
   }, [generatedBlog])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchOpenAiUsage = async () => {
+      if (!token) {
+        if (!cancelled) setOpenAiUsageCount(0)
+        return
+      }
+
+      try {
+        const res = await axios.get('/api/blogs', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (cancelled) return
+
+        const openAiBlogs = Array.isArray(res.data)
+          ? res.data.filter((blog) => (blog.llmProvider || '').toLowerCase() === 'openai').length
+          : 0
+
+        setOpenAiUsageCount(openAiBlogs)
+      } catch (_) {
+        if (!cancelled) setOpenAiUsageCount(0)
+      }
+    }
+
+    fetchOpenAiUsage()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, generatedBlog])
+
   const topicWords = wordCount(topic)
   const isTopicLimitExceeded = topicWords > MAX_TOPIC_WORDS
+  const isOpenAiLimitReached = openAiUsageCount >= MAX_OPENAI_BLOGS
 
   const handleTopicChange = (e) => {
     const nextValue = e.target.value
@@ -207,29 +244,57 @@ export default function Generate() {
             <div>
               <label className="input-label">LLM Provider</label>
               <div className="tone-group" style={{ flexWrap: 'wrap' }}>
-                {LLM_OPTIONS.map((option) => (
+                {LLM_OPTIONS.map((option) => {
+                  const isDisabled = option.provider === 'openai' && isOpenAiLimitReached
+
+                  return (
                   <button
                     key={option.provider}
                     type="button"
-                    onClick={() => setSelectedLlm(option)}
+                    onClick={() => {
+                      if (!isDisabled) setSelectedLlm(option)
+                    }}
+                    disabled={isDisabled}
                     className="tone-btn"
                     style={{
                       flex: '1 1 30%',
                       minWidth: '120px',
                       padding: '0.75rem',
                       borderRadius: '0.9rem',
-                      backgroundColor: selectedLlm.provider === option.provider ? 'rgba(139, 92, 246, 0.12)' : 'var(--color-bg-elevated)',
-                      color: selectedLlm.provider === option.provider ? '#e9d5ff' : 'var(--color-text-primary)',
-                      border: selectedLlm.provider === option.provider ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid var(--color-border)',
+                      backgroundColor: isDisabled
+                        ? 'rgba(255,255,255,0.03)'
+                        : selectedLlm.provider === option.provider
+                          ? 'rgba(139, 92, 246, 0.12)'
+                          : 'var(--color-bg-elevated)',
+                      color: isDisabled
+                        ? 'var(--color-text-subtle)'
+                        : selectedLlm.provider === option.provider
+                          ? '#e9d5ff'
+                          : 'var(--color-text-primary)',
+                      border: isDisabled
+                        ? '1px solid rgba(255,255,255,0.05)'
+                        : selectedLlm.provider === option.provider
+                          ? '1px solid rgba(139, 92, 246, 0.4)'
+                          : '1px solid var(--color-border)',
                       textAlign: 'left',
+                      opacity: isDisabled ? 0.6 : 1,
+                      cursor: isDisabled ? 'not-allowed' : 'pointer',
                     }}
                   >
                     <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.2rem' }}>{option.label}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginBottom: '0.3rem' }}>{option.model}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-subtle)', lineHeight: 1.4 }}>{option.description}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--color-text-subtle)', lineHeight: 1.4 }}>
+                      {isDisabled ? 'OpenAI limit reached for this account. Use Groq instead.' : option.description}
+                    </div>
                   </button>
-                ))}
+                  )
+                })}
               </div>
+              {isOpenAiLimitReached && (
+                <div style={{ marginTop: '0.55rem', fontSize: '0.72rem', color: '#f59e0b', fontWeight: 600 }}>
+                  OpenAI is limited to 2 generated blogs per user. Please continue with Groq.
+                </div>
+              )}
             </div>
 
             <div>

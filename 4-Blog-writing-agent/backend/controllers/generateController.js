@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Blog = require('../models/Blog.js');
 const { runAgent, resumeAgent } = require('../services/agentRunner.js');
 const MAX_BLOGS_PER_USER = 8;
+const MAX_OPENAI_BLOGS_PER_USER = 2;
 
 function setupSse(res) {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -41,6 +42,36 @@ async function saveBlogIfPossible(req, result, topic) {
   });
 }
 
+async function enforceOpenAiGenerationLimit(req) {
+  const selectedProvider = (req.body?.llmProvider || '').trim().toLowerCase();
+  if (selectedProvider !== 'openai') {
+    return;
+  }
+
+  if (!req.user?.id) {
+    const authError = new Error('OpenAI generation requires an authenticated user session.');
+    authError.userMessage = authError.message;
+    throw authError;
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    const unavailableError = new Error('OpenAI generation is temporarily unavailable. Please use Groq instead.');
+    unavailableError.userMessage = unavailableError.message;
+    throw unavailableError;
+  }
+
+  const openAiBlogCount = await Blog.countDocuments({
+    user: req.user.id,
+    llmProvider: 'openai',
+  });
+
+  if (openAiBlogCount >= MAX_OPENAI_BLOGS_PER_USER) {
+    const limitError = new Error('You can generate at most 2 blogs with OpenAI on this account. Please use Groq for additional blogs.');
+    limitError.userMessage = limitError.message;
+    throw limitError;
+  }
+}
+
 async function generateBlog(req, res) {
   const sendEvent = setupSse(res);
 
@@ -50,6 +81,8 @@ async function generateBlog(req, res) {
       sendEvent({ type: 'error', message: 'Topic is required' });
       return;
     }
+
+    await enforceOpenAiGenerationLimit(req);
 
     const result = await runAgent(req.body, (event) => {
       if (event?.type === 'step') {

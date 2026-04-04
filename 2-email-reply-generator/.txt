@@ -2,6 +2,7 @@
 2. store the email in the mongodb
 3. hitl implement
 4. Add a node that evaluates the generated reply (is it empathetic enough? does it address all points?) and loops back if it fails
+we can make a mcp client on our laptop and connect it to a mcp server(it can be others gmail)
 
 
 ui website for this is 
